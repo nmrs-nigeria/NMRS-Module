@@ -12,6 +12,9 @@ import com.mashape.unirest.http.JsonNode;
 import com.mashape.unirest.http.Unirest;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.entity.mime.MultipartEntity;
+import org.apache.http.entity.mime.content.InputStreamBody;
+import org.apache.http.entity.mime.content.StringBody;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.openmrs.api.APIException;
@@ -26,6 +29,7 @@ import org.openmrs.module.nigeriaemr.model.ndrMessageLog;
 import org.openmrs.module.nigeriaemr.omodmodels.NDRApiHandshakeSummary;
 import org.openmrs.module.nigeriaemr.omodmodels.NDRApiResponse;
 import org.openmrs.module.nigeriaemr.omodmodels.NDRAuth;
+import org.openmrs.module.nigeriaemr.omodmodels.NDRBeep;
 import org.openmrs.module.nigeriaemr.service.NdrExtractionService;
 import org.openmrs.module.nigeriaemr.util.LoggerUtils;
 
@@ -33,10 +37,8 @@ import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
-import java.io.Console;
-import java.io.File;
-import java.io.FilenameFilter;
-import java.io.IOException;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -49,6 +51,9 @@ import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+import java.util.zip.GZIPOutputStream;
+
+import static com.google.common.collect.TreeTraverser.using;
 
 public class NDRApiUtils {
 	
@@ -61,14 +66,27 @@ public class NDRApiUtils {
 	
 	private String beepPass = Context.getAdministrationService().getGlobalProperty("beep_pass");
 	
+	private String authUser = Context.getAdministrationService().getGlobalProperty("auth_user");
+	
+	private String authPass = Context.getAdministrationService().getGlobalProperty("auth_pass");
+	
 	Integer totalFiles = 0;
 	
 	Integer pushedFiles = 0;
+	public static byte[] compress(List<String> patients) throws Exception
+	{
+		if (patients == null || patients.isEmpty()) {
+			return null;
+		}
+
+		String input = StringUtils.join(patients, ",");
+		ByteArrayOutputStream obj = new ByteArrayOutputStream();
+		GZIPOutputStream gzip = new GZIPOutputStream(obj);
+		gzip.write(input.getBytes(StandardCharsets.UTF_8));
+		gzip.close();
+		return obj.toByteArray();
+	}
 	
-	//	public NDRApiUtils()
-	//	{
-	//		host = Context.getAdministrationService().getGlobalProperty("ndr_beep_date");
-	//	}
 	public void setUniRestClient(Unirest unirest) {
 		try {
 			TrustManager[] trustAllCerts = new TrustManager[] { new X509TrustManager() {
@@ -106,6 +124,7 @@ public class NDRApiUtils {
 	public NDRApiResponse auth(String email, String password) {
 		NDRApiResponse apiRes = new NDRApiResponse();
 		NDRAuth auth = new NDRAuth();
+		auth.type = "auth";
 		try {
 			if ((beepUser != null && !beepUser.isEmpty()) && (beepPass != null && !beepPass.isEmpty())) {
 				auth.email = beepUser;
@@ -125,14 +144,13 @@ public class NDRApiUtils {
 			//UniRest client to accept self-signed SSL certificates
 			setUniRestClient(unirest);
 			// Host url
-			String api = StringUtils.removeEnd(host, "/").trim() + "/auth";
+			String api = StringUtils.removeEnd(host, "/").trim(); // + "/auth";
 			System.out.println("Authenticating with the NDR...");
 			System.out.println("\n");
-			
 			String json = new Gson().toJson(auth);
-			
 			//Post request
-			HttpResponse<JsonNode> response = unirest.post(api).body(json).asJson();
+			HttpResponse<JsonNode> response = unirest.post(api).header("Accept", "application/json")
+			        .header("Content-Type", "application/json").basicAuth(authUser, authPass).body(json).asJson();
 			//convert response to NDRApiResponse class
 			NDRApiResponse apiResponse = new ObjectMapper().readValue(response.getBody().toString(), NDRApiResponse.class);
 			if (apiResponse.code > 0 && apiResponse.isAuthenticated) {
@@ -277,7 +295,10 @@ public class NDRApiUtils {
 			{
 				if (batch != null && !batch.isEmpty())
 				{
-					HttpResponse<JsonNode> response = unirest.post(api).header("token", apiRes.token).body(batch).asJson();
+					NDRBeep beep = new NDRBeep();
+//					beep.data = batch;
+					beep.type = "beep";
+					HttpResponse<JsonNode> response = unirest.post(api).header("token", apiRes.token).body(beep).asJson();
 					String res = response.getBody().toString();
 					System.out.println("\n response: " + res + "\n");
 					NDRApiResponse apiResponse = new ObjectMapper().readValue(res, NDRApiResponse.class);
@@ -293,7 +314,7 @@ public class NDRApiUtils {
 					}
 				}
 			}
-			if (summary.totalPushed == summary.totalFiles)
+			if (summary.totalPushed.equals(summary.totalFiles))
 			{
 				summary.code = 5;
 			}
@@ -327,7 +348,7 @@ public class NDRApiUtils {
 		try
 		{
 			//set endpoint
-			String api = StringUtils.removeEnd(host, "/").trim() + "/beep";
+			String api = StringUtils.removeEnd(host, "/").trim(); //+ "/beep";
 			Unirest unirest = new Unirest();
 			//configure UniRest to use Gson Object mapper
 			configureUnirest(unirest);
@@ -344,20 +365,7 @@ public class NDRApiUtils {
 			}
 
 			File folder = new File(jsonFolder);
-			//fetch only a given number of files from directory per each AJAX call from the front-end
-			Integer batchSize = 50;
-			if(beepSize != null && !beepSize.isEmpty())
-			{
-				try
-				{
-					batchSize = Integer.parseInt(beepSize);
-				}
-				catch (NumberFormatException e)
-				{
-					batchSize = 50;
-				}
-			}
-			List<Path> files = FetchFiles(folder, batchSize);
+			List<Path> files = FetchFiles(folder);
 			//Generate list of the JSON files
 			if (files == null || files.isEmpty() || files.size() < 1)
 			{
@@ -395,10 +403,6 @@ public class NDRApiUtils {
 						json.add(data);
 						validFiles.add(path);
 					}
-//					else
-//					{
-//						System.out.println("\nMapped Data is empty\n");
-//					}
 				}
 				catch (Exception ex)
 				{
@@ -419,9 +423,18 @@ public class NDRApiUtils {
 			summary.totalFiles = totalFiles;
 			System.out.println("\nPatient(s) to be pushed: " + totalFiles);
 
+			NDRBeep beep = new NDRBeep();
+			byte[] compressed = compress(json);
+			beep.type = "beep";
+			beep.data = compressed;
+
 			System.out.println("\nPushing data to the NDR...");
-			//push the data to the NDR in batches
-			HttpResponse<JsonNode> response = unirest.post(api).header("token", apiRes.token).body(json).asJson();
+			HttpResponse<JsonNode> response = unirest.post(api)
+					.basicAuth(authUser, authPass)
+					.header("token", apiRes.token)
+					.header("Content-Type","application/json")
+					.header("accept-encoding","gzip,deflate")
+					.body(beep).asJson();
 			String res = response.getBody().toString();
 			System.out.println("\n response: " + res + "\n");
 			NDRApiResponse apiResponse = new ObjectMapper().readValue(res, NDRApiResponse.class);
@@ -627,6 +640,15 @@ public class NDRApiUtils {
 	public List<List<String>> BatchList(List<String> files) {
 		List<List<String>> batches = Lists.partition(files, 20);
 		return batches;
+	}
+	
+	public List<Path> FetchFiles(File node) throws IOException
+	{
+		Path folder = Paths.get(node.getPath());
+        return Files.walk(folder)
+				//Filter out empty files and files from the error folder
+				.filter(p ->  Files.isRegularFile(p) && p.toFile().length() > 0 && !p.toString().contains("error") && p.getFileName().toString().contains("json"))
+				.collect(Collectors.toList());
 	}
 	
 	public List<Path> FetchFiles(File node, Integer pageSize) throws IOException

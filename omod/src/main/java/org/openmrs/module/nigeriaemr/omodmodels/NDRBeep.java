@@ -1,10 +1,10 @@
 package org.openmrs.module.nigeriaemr.omodmodels;
 
-public class NDRAuth {
+import java.util.List;
+
+public class NDRBeep {
 	
-	public String email;
-	
-	public String password;
+	public byte[] data;
 	
 	public String type;
 }
