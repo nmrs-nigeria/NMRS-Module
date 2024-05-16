@@ -91,10 +91,10 @@
 </style>
 <div>
     <button onclick="deletePrints()" id="deleteBtn" hidden="true" class="btn">Delete FingerPrints</button>
-    <button onclick="fp_verification()" id="fpVerfiyBtn" hidden="true" class="btn">Re-Capture</button>
-    <span style="font-size: 15px;" id="countFP"></span>
-    <span id="basereplacementFlag" style="font-size: 12px; display: none; color: #ffffff; margin-left: 20px; padding: 2px; background-color: #007bff; border-radius: 25px; width:300px;float:left;">The base fingerprint was replaced for this patient!</span>
-    <span id="nextrecaptureFlag" style="font-size: 12px; display: block; color: #ffffff; margin-left: 0px; padding: 2px; background-color: #ba8b00; border-radius: 25px; width:660px;float:right;">Biometric recapture is unavailable at this time. Please note that it must be at least two weeks since your last capture.</span>
+    <button onclick="fp_verification()" id="fpVerfiyBtn" hidden="true" style="float: left" class="btn">Re-Capture</button>
+    <span style="font-size: 15px; float: left;" id="countFP"></span>
+    <span id="basereplacementFlag" style="font-size: 12px; display: none; color: #ffffff; margin-left: 20px; padding: 2px; background-color: #007bff; border-radius: 25px; width:300px;float:right;">The base fingerprint was replaced for this patient!</span>
+    <span id="nextrecaptureFlag" style="font-size: 12px; display: none; color: #ffffff; margin-left: 0px; padding: 2px; background-color: #ba8b00; border-radius: 25px; width:660px;float:left;">Biometric recapture is unavailable at this time. Please note that it must be at least two weeks since your last capture.</span>
     <br>
 </div>
 
@@ -444,11 +444,12 @@
                     //check if the base capture was not captured today then hide the captured button and recapture was more than 14days
                     if (arr[0].toString() == 'false' && arr[1].toString() == 'true' && parseInt(recaptureCount) > 0){
                         jQuery('#fpVerfiyBtn').attr('hidden', false);
-
+                        document.getElementById("nextrecaptureFlag").style.display ="none";
                     }
 
                     if (arr[0].toString() == 'false' && arr[1].toString() == 'false' && parseInt(recaptureCount) == 0){
                         jQuery('#fpVerfiyBtn').attr('hidden', false);
+                        document.getElementById("nextrecaptureFlag").style.display ="none";
                     }
 
                     if (arr[1].toString() == 'false' && parseInt(recaptureCount) > 0){
