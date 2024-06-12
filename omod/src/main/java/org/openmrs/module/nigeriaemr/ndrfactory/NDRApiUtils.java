@@ -73,12 +73,12 @@ public class NDRApiUtils {
 	Integer totalFiles = 0;
 	
 	Integer pushedFiles = 0;
-	public static byte[] compress(List<String> patients) throws Exception
-	{
+	
+	public static byte[] compress(List<String> patients) throws Exception {
 		if (patients == null || patients.isEmpty()) {
 			return null;
 		}
-
+		
 		String input = StringUtils.join(patients, ",");
 		ByteArrayOutputStream obj = new ByteArrayOutputStream();
 		GZIPOutputStream gzip = new GZIPOutputStream(obj);
